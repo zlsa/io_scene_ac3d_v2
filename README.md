@@ -2,7 +2,8 @@
 
 AC3D importer/exporter for Blender 2.7+
 
-Currently only the exporter works, and only barely.
+Currently only the exporter works and should be fully
+standards-compliant.
 
 # License (MIT)
 
