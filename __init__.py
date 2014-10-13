@@ -110,15 +110,18 @@ def export(forwards            = "+Z",
 
     # location
     x, y, z  = transform_xyz(obj.matrix_local.to_translation())
-    obj_out += "loc {:5.10f} {:5.10f} {:5.10f}\n".format(x, y, z)
+    obj_out += "loc {:5.6f} {:5.6f} {:5.6f}\n".format(x, y, z)
 
     # rotation
     matrix   = obj.matrix_local.to_quaternion().to_matrix()
-    obj_out += "rot"
-    for x in range(0, 3):
-      x, y, z  = matrix[x]
-      obj_out += " {:5.10f} {:5.10f} {:5.10f}".format(x, y, z)
-    obj_out += "\n"
+    if matrix[0] != [1, 0, 0] or \
+       matrix[1] != [0, 1, 0] or \
+       matrix[2] != [0, 0, 1]:
+      obj_out += "rot"
+      for x in range(0, 3):
+        x, y, z  = matrix[x]
+        obj_out += " {:5.6f} {:5.6f} {:5.6f}".format(x, y, z)
+      obj_out += "\n"
 
     # export mesh data
     if obj.type == "MESH":
@@ -126,27 +129,44 @@ def export(forwards            = "+Z",
       slots = obj.material_slots
 
       vertex_number = len(mesh.vertices)
-      face_number   = len(mesh.polygons)
+      face_number   = len(mesh.tessfaces)
 
+      if len(mesh.uv_textures) > 0 and vertex_number > 0:
+        filepath = mesh.uv_textures[0].data[0].image.filepath
+        if filepath.startswith("//"): filepath = filepath[2:]
+        obj_out += "texture \"{filepath}\"\n".format(filepath = filepath)
       # handle vertices
       obj_out += "numvert {vertex_number}\n".format(vertex_number = str(vertex_number))
       for vertex in mesh.vertices:
         x, y, z = transform_xyz(vertex.co)
-        obj_out += "{:5.10f} {:5.10f} {:5.10f}\n".format(x, y, z)
+        obj_out += "{:5.6f} {:5.6f} {:5.6f}\n".format(x, y, z)
+
+      has_uv = False
+      if len(mesh.uv_textures) and mesh.tessface_uv_textures.active: has_uv = True
 
       # handle faces
       obj_out += "numsurf {face_number}\n".format(face_number = str(face_number))
-      for poly in mesh.polygons:
+      poly_index = 0
+      for poly in mesh.tessfaces:
         shading = 0
-        if mesh.show_double_sided: shading &= 1<<2
-        obj_out += "SURF 0X{shading}\n".format(shading = str(shading << 4))
+        if poly.use_smooth:        shading |= 1<<0
+        if mesh.show_double_sided: shading |= 1<<1
+        obj_out += "SURF 0X{shading}\n".format(shading = str(hex(shading << 4))[2:])
         if len(slots) == 0:
           obj_out += "mat 0\n"
         else:
           obj_out += "mat {index}\n".format(index = str(material_indexes[slots[poly.material_index].name]))
         obj_out += "refs {vertices}\n".format(vertices = str(len(poly.vertices)))
+
+        vertex_index = 0
         for vertex in poly.vertices:
-          obj_out += "{vertex} 0 0\n".format(vertex = str(vertex))
+          if has_uv:
+            uv = mesh.tessface_uv_textures.active.data[poly_index].uv[vertex_index]
+          else:
+            uv = [0, 0]
+          obj_out += "{vertex} {uvx:5.6f} {uvy:5.6f}\n".format(vertex = str(vertex), uvx = uv[0], uvy = uv[1])
+          vertex_index += 1
+        poly_index += 1
 
     # handle children
     obj_out += "kids {children}\n".format(children = str(children))
